@@ -1,0 +1,10 @@
+# TU Delft campus tour optimizer -- runtime dependencies.
+# The MILP is solved by HiGHS, which ships INSIDE scipy (scipy.optimize.milp),
+# so no separate solver package is required.
+
+numpy>=1.24
+pandas>=2.0
+scipy>=1.11          # provides optimize.milp (HiGHS); needs >=1.9
+matplotlib>=3.7      # schematic campus map
+streamlit>=1.30      # web interface (app.py)
+openpyxl>=3.1        # reading/writing .xlsx (used via pandas)
