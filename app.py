@@ -15,6 +15,7 @@ from campus_data import (
     FACULTIES, EXTRAS, NODES, _COORD, default_dwell, N_FAC,
     build_choice_matrix, PROGRAM_TO_FACULTY,
 )
+from make_sample_data import make
 from model import Params, solve
 
 st.set_page_config(page_title="TU Delft Tour Optimizer", layout="wide")
@@ -73,9 +74,9 @@ with col_l:
     if up is not None:
         df = pd.read_excel(up)
     else:
-        st.info("No file uploaded — using the built-in sample (100 students).")
-        from make_sample_data import make
-        df = make(100, path=None)      # in-memory; no file written
+        st.info("No file uploaded — using the built-in example (50 students, "
+                "based on real programme co-occurrence data).")
+        df = make(50, path=None)          # in-memory; no file written
 
     # column check (case-insensitive)
     have = {c.lower().strip(): c for c in df.columns}

@@ -64,7 +64,7 @@ def brute_force_duration(node_names, p: Params) -> float:
 
 
 def main():
-    df = make(100)
+    df = make(50, path=None)
     choices = load_choices(df)
     p = Params(t_max=120.0, b=np.array([0, 0, 1., 0, 0, 0, 2., 1., 1.5]),
                mip_rel_gap=1e-6)

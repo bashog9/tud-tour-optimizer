@@ -49,7 +49,10 @@ automatically.
 Faculty codes (`AE, BK, CITG, EWI, IO, ME, TNW-zuid, TNW, TBM`) are also
 accepted directly. If a student lists several programmes from the same faculty,
 that faculty is counted once, at its best rank. `sample_students.xlsx` is a
-ready-made example with 100 students.
+ready-made example with 50 students, generated from real programme
+co-occurrence data (which programmes are commonly chosen together); the app uses
+it automatically when no file is uploaded. `make_sample_data.make_files(...)`
+writes additional examples of other sizes.
 
 The programme-to-faculty mapping lives in `campus_data.py`
 (`PROGRAM_TO_FACULTY`); edit it there if a programme is added or renamed.
@@ -73,7 +76,7 @@ The programme-to-faculty mapping lives in `campus_data.py`
 | `app.py`             | The Streamlit web interface. |
 | `model.py`           | The solver: route pre-computation and the optimization. |
 | `campus_data.py`     | Faculties, programme mapping, the Aula travel-time matrix, faculty pairings. |
-| `make_sample_data.py`| Generates a synthetic 100-student Excel for testing. |
+| `make_sample_data.py`| Generates a synthetic 100-student Excel from real programme co-occurrence data. |
 | `test_run.py`        | Console end-to-end run on the sample. |
 | `verify.py`          | Independent correctness checks (proof the answer is right). |
 | `travel_times.csv`   | Editable walking-time matrix (see "Travel times" below). |

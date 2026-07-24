@@ -15,7 +15,7 @@ def load_choices(df: pd.DataFrame) -> np.ndarray:
 
 
 def main():
-    df = make(100)
+    df = make(50, path=None)
     choices = load_choices(df)
 
     p = Params(
