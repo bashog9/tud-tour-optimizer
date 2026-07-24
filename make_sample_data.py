@@ -1,22 +1,17 @@
 """Generate a synthetic student-preference Excel whose choice-combinations are
-drawn from REAL co-occurrence data (how often programmes are chosen together).
+drawn from REAL co-occurrence data (how often programmes are chosen together),
+with a guaranteed minimum presence for the five smaller programmes.
 
-The two tables below are the observed top-20 most common two- and three-programme
-combinations, with their counts. Students are sampled from these:
+The bulk of the students are drawn from the observed top-20 two- and three-
+programme combinations (weighted by their counts). On top of that, a reserved
+"rare budget" guarantees that each of the five programmes absent from the data
+(the TNW-zuid trio, Klinische Technologie, Earth) appears at least once in every
+file, with a tiered frequency: MST and LST most, Klinische Technologie less,
+Nanobiology and Earth least.
 
-  * with probability (1 - tail_fraction): draw a whole three-programme
-    combination from the triple table, weighted by its count;
-  * otherwise: draw a common pair from the pair table, then add a third
-    programme drawn from the data-derived marginal popularity.
-
-The source tables are UNORDERED (a set of programmes, no rank), so a rank order
-(Choice1 = first choice, etc.) is assigned by a random permutation per student.
-Everything is derived from the provided counts and reproducible via `seed`.
-
-Note: the provided data only covers 11 programmes; the five smaller ones
-(all three TNW-zuid programmes, Klinische Technologie, Earth Climate & Tech)
-do not appear in the top-20 tables, so by default they do not appear in the
-sample either. Set include_rare=True to add them at a low baseline rate.
+Source combinations are UNORDERED, so a rank order (Choice1 = first choice) is
+assigned by a random permutation per student. Everything is reproducible via
+`seed`.
 """
 
 import numpy as np
@@ -24,7 +19,6 @@ import pandas as pd
 from campus_data import PROGRAM_TO_FACULTY
 
 # --- observed data (top-20 combinations with counts) -----------------------
-# Two-programme combinations:
 PAIR_COMBOS = [
     (("Bouwkunde", "Industrieel Ontwerpen"), 411),
     (("Civiele Techniek", "Werktuigbouwkunde"), 402),
@@ -48,7 +42,6 @@ PAIR_COMBOS = [
     (("Aerospace Engineering", "Maritieme Techniek"), 162),
 ]
 
-# Three-programme combinations:
 TRIPLE_COMBOS = [
     (("Bouwkunde", "Civiele Techniek", "Werktuigbouwkunde"), 98),
     (("Bouwkunde", "Civiele Techniek", "Industrieel Ontwerpen"), 85),
@@ -72,20 +65,27 @@ TRIPLE_COMBOS = [
     (("Civiele Techniek", "Industrieel Ontwerpen", "Technische Bestuurskunde"), 43),
 ]
 
-# programmes not present in the top-20 tables (the smaller ones)
-_RARE = ["Earth, Climate and Technology", "Klinische Technologie",
-         "Life Science and Technology", "Molecular Science and Technology",
-         "Nanobiology"]
+# The five programmes absent from the data, with tiered relative frequency
+# (MST, LST most; Klinische Technologie less; Nanobiology, Earth least).
+RARE_WEIGHTS = {
+    "Molecular Science and Technology": 3,
+    "Life Science and Technology": 3,
+    "Klinische Technologie": 2,
+    "Nanobiology": 1,
+    "Earth, Climate and Technology": 1,
+}
 
 # sanity: every programme name used here must exist in the mapping
 for combo, _ in PAIR_COMBOS + TRIPLE_COMBOS:
     for prog in combo:
         assert prog in PROGRAM_TO_FACULTY, f"unknown programme: {prog}"
+for prog in RARE_WEIGHTS:
+    assert prog in PROGRAM_TO_FACULTY, f"unknown rare programme: {prog}"
 
 
-def _marginal_popularity():
-    """Programme -> total count over all pair and triple combinations that
-    contain it (a data-derived popularity, used for the tail's third pick)."""
+def _marginal_common():
+    """Common-programme popularity from the data (rare programmes excluded):
+    programme -> total count over all pair and triple combinations."""
     marg = {}
     for combo, cnt in PAIR_COMBOS + TRIPLE_COMBOS:
         for prog in combo:
@@ -93,57 +93,83 @@ def _marginal_popularity():
     return marg
 
 
-def make(n: int = 100, path: str | None = "sample_students.xlsx",
+def make(n: int = 50, path: str | None = "sample_students.xlsx",
          seed: int = 42, tail_fraction: float = 0.2,
-         include_rare: bool = True) -> pd.DataFrame:
-    """Deterministic sample based on the observed co-occurrence data.
+         rare_fraction: float = 0.2) -> pd.DataFrame:
+    """Deterministic sample based on the observed co-occurrence data, with a
+    guaranteed minimum presence for the five smaller programmes.
 
-    tail_fraction : share of students drawn from a common PAIR plus a third
+    tail_fraction : share of the COMMON students drawn from a pair + a third
                     programme (adds variety beyond the exact top-20 triples).
-    include_rare  : if True (default), the five programmes absent from the data
-                    appear at a low baseline rate so the whole campus (including
-                    TNW-zuid) is represented.
+    rare_fraction : target share of students reserved for the five rare
+                    programmes; each rare programme is guaranteed at least once,
+                    and any surplus is allotted by the tiered RARE_WEIGHTS.
     """
     rng = np.random.default_rng(seed)
 
     triples = [c for c, _ in TRIPLE_COMBOS]
-    tri_w = np.array([w for _, w in TRIPLE_COMBOS], float)
-    tri_w /= tri_w.sum()
-
+    tri_w = np.array([w for _, w in TRIPLE_COMBOS], float); tri_w /= tri_w.sum()
     pairs = [c for c, _ in PAIR_COMBOS]
-    pair_w = np.array([w for _, w in PAIR_COMBOS], float)
-    pair_w /= pair_w.sum()
+    pair_w = np.array([w for _, w in PAIR_COMBOS], float); pair_w /= pair_w.sum()
 
-    marg = _marginal_popularity()
-    if include_rare:
-        floor = 0.4 * np.median(list(marg.values()))
-        for p in _RARE:
-            marg.setdefault(p, floor)
+    marg = _marginal_common()
     marg_progs = list(marg.keys())
-    marg_w = np.array([marg[p] for p in marg_progs], float)
-    marg_w /= marg_w.sum()
+    marg_w = np.array([marg[p] for p in marg_progs], float); marg_w /= marg_w.sum()
 
-    def draw_third(exclude):
+    def draw_from_marginal(k, exclude):
         w = marg_w.copy()
         for p in exclude:
             if p in marg_progs:
                 w[marg_progs.index(p)] = 0.0
         w /= w.sum()
-        return marg_progs[rng.choice(len(marg_progs), p=w)]
+        idx = rng.choice(len(marg_progs), size=k, replace=False, p=w)
+        return [marg_progs[i] for i in idx]
 
-    rows = []
-    for i in range(n):
+    # ---- rare budget: guarantee one of each, allot the surplus by tier ------
+    rares = list(RARE_WEIGHTS)
+    budget = min(n, max(len(rares), round(rare_fraction * n)))
+    counts = {r: 1 for r in rares} if budget >= len(rares) else {}
+    if budget < len(rares):                      # tiny n: fit as many as we can
+        for r in rares[:budget]:
+            counts[r] = 1
+    surplus = budget - sum(counts.values())
+    # D'Hondt / Jefferson apportionment of the surplus: repeatedly give the next
+    # unit to the programme maximizing weight / (current allocation + 1). This
+    # favours the higher-weight programmes, so MST and LST lead, then Klinische
+    # Technologie, then Nanobiology and Earth.
+    alloc = {r: 0 for r in rares}
+    for _ in range(max(0, surplus)):
+        best = max(rares, key=lambda r: (RARE_WEIGHTS[r] / (alloc[r] + 1),
+                                         RARE_WEIGHTS[r], -rares.index(r)))
+        alloc[best] += 1
+    for r in rares:
+        if r in counts:
+            counts[r] += alloc[r]
+
+    n_rare = sum(counts.values())
+    n_common = n - n_rare
+
+    students = []
+    # common students from the co-occurrence distribution
+    for _ in range(n_common):
         if rng.random() >= tail_fraction:
             combo = list(triples[rng.choice(len(triples), p=tri_w)])
         else:
             a, b = pairs[rng.choice(len(pairs), p=pair_w)]
-            combo = [a, b, draw_third((a, b))]
-        order = rng.permutation(3)            # unordered source -> random ranks
+            combo = [a, b, draw_from_marginal(1, (a, b))[0]]
+        students.append(combo)
+    # rare students: rare programme + two common companions
+    for r, c in counts.items():
+        for _ in range(c):
+            students.append([r] + draw_from_marginal(2, (r,)))
+
+    rng.shuffle(students)                        # mix rare among common
+    rows = []
+    for i, combo in enumerate(students):
+        order = rng.permutation(3)               # unordered source -> random ranks
         combo = [combo[j] for j in order]
-        rows.append({
-            "Student": f"Student_{i+1:03d}",
-            "Choice1": combo[0], "Choice2": combo[1], "Choice3": combo[2],
-        })
+        rows.append({"Student": f"Student_{i+1:03d}",
+                     "Choice1": combo[0], "Choice2": combo[1], "Choice3": combo[2]})
 
     df = pd.DataFrame(rows)
     if path is not None:
@@ -152,8 +178,8 @@ def make(n: int = 100, path: str | None = "sample_students.xlsx",
 
 
 def make_files(sizes=(20, 30, 40, 60), directory="."):
-    """Write one Excel per size (each following the co-occurrence distribution,
-    with a distinct reproducible seed) and return the list of paths."""
+    """Write one Excel per size (each following the distribution, with a
+    distinct reproducible seed) and return the list of paths."""
     import os
     paths = []
     for n in sizes:
@@ -164,6 +190,6 @@ def make_files(sizes=(20, 30, 40, 60), directory="."):
 
 
 if __name__ == "__main__":
-    df = make(50)                          # default built-in example: 50 students
+    df = make(50)                                # default built-in example
     print(df.head(8).to_string(index=False))
     print(f"\n{len(df)} students written to sample_students.xlsx")
