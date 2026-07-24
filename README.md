@@ -64,7 +64,7 @@ The programme-to-faculty mapping lives in `campus_data.py`
 - One route per tour, written as `Aula -> ... -> Aula`, with its total time.
 - The list of students on each tour.
 - A clear list of students who got none of their three chosen faculties.
-- A satisfaction chart and a schematic campus map.
+- A satisfaction chart and a campus map with the real building positions.
 - An Excel download with sheets `Tours`, `Assignments`, and `NoChoiceHonored`.
 
 ---

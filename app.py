@@ -192,27 +192,34 @@ if "result" in st.session_state:
         st.caption("0 = none of the three chosen faculties are on the "
                    "assigned tour; higher = better-ranked choices honored.")
     with c2:
-        st.markdown("**Campus map (schematic)**")
+        st.markdown("**Campus map**")
         fig, ax = plt.subplots(figsize=(5, 6))
         for nm, (x, y) in _COORD.items():
             if nm == "Aula":
-                ax.scatter(x, -y, s=180, marker="*", color="#c00", zorder=5)
-                ax.annotate("Aula", (x, -y), fontsize=8, fontweight="bold",
+                ax.scatter(x, y, s=180, marker="*", color="#c00", zorder=5)
+                ax.annotate("Aula", (x, y), fontsize=8, fontweight="bold",
                             xytext=(4, 4), textcoords="offset points")
             else:
-                ax.scatter(x, -y, s=30, color="#888")
-                ax.annotate(nm, (x, -y), fontsize=7,
+                ax.scatter(x, y, s=30, color="#888")
+                ax.annotate(nm, (x, y), fontsize=7,
                             xytext=(3, 3), textcoords="offset points")
         colors = plt.cm.tab10.colors
         for k, t in enumerate(res.tours):
             xs = [_COORD[nm][0] for nm in t.route()]
-            ys = [-_COORD[nm][1] for nm in t.route()]
+            ys = [_COORD[nm][1] for nm in t.route()]
             ax.plot(xs, ys, "-o", color=colors[k % 10], lw=2, ms=5,
                     label=f"Tour {k + 1}", alpha=0.75)
-        ax.legend(fontsize=8)
+        ax.legend(fontsize=8, loc="best")
+        ax.set_aspect("equal")            # true scale: 1 m east == 1 m north
+        ax.annotate("N", xy=(0.04, 0.97), xycoords="axes fraction",
+                    fontsize=10, fontweight="bold", ha="center", va="top")
+        ax.annotate("↑", xy=(0.04, 0.94), xycoords="axes fraction",
+                    fontsize=11, ha="center", va="top")
         ax.set_xticks([]); ax.set_yticks([])
         for s in ax.spines.values():
             s.set_visible(False)
+        st.caption("Real building positions (WGS84), north up; lines are the "
+                   "tour routes. Straight lines, not walking paths.")
         st.pyplot(fig)
 
     # ---- download -----------------------------------------------------------

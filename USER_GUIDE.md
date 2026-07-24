@@ -130,8 +130,9 @@ de standaardwaarden staan.
   studenten.
 - De grafiek laat zien hoe tevreden studenten zijn (0 betekent geen enkele keuze
   gehonoreerd, hoger betekent betere keuzes gehonoreerd).
-- De kaart toont schematisch waar de rondleidingen langslopen. De rode ster is de
-  Aula.
+- De kaart toont op de echte gebouwlocaties waar de rondleidingen langslopen
+  (noord boven). De rode ster is de Aula. De lijnen zijn rechte verbindingen
+  tussen gebouwen, niet de exacte looproutes.
 
 Onderaan staat een knop "Download result (Excel)" met drie tabbladen: de
 rondleidingen, de volledige indeling, en een aparte lijst met studenten die geen

@@ -71,40 +71,41 @@ assert TRAVEL_FULL.shape == (N_ALL, N_ALL)
 # Back-compat view over the 12 visitable nodes (node<->node block only).
 TRAVEL = TRAVEL_FULL[:N_NODES, :N_NODES]
 
-# Measured Aula->node minutes (the depot row), kept for the schematic map only.
-AULA_MIN = {nm: float(TRAVEL_FULL[DEPOT, IDX[nm]]) for nm in NODES}
-
-# Approximate campus bearings (deg, 0 = East, 90 = North). Used ONLY to lay out
-# the schematic map; they play no role in the optimization, which uses the
-# measured matrix above. Radius = measured Aula time, angle = bearing below.
-_ANGLE = {
-    "TNW":        70.0,   # just N/NE of the Aula
-    "Library":   200.0,   # immediately S (under the hill)
-    "CITG":       10.0,   # E, Stevinweg
-    "ME":        250.0,   # S, Mekelweg 2
-    "EWI":       240.0,   # SSE, Mekelweg 4
-    "IO":        220.0,   # SSW, Landbergstraat
-    "TBM":       195.0,   # W/WSW, Jaffalaan
-    "BK":        120.0,   # NNW, Julianalaan (off on its own)
-    "DreamHall":  12.0,   # E, Stevinweg 4 (next to CiTG)
-    "X":         255.0,   # S, sports centre
-    "TNW-zuid":  262.0,   # far S, Van der Maasweg
-    "AE":        250.0,   # far S, Kluyverweg
+# ---------------------------------------------------------------------------
+# Real geographic coordinates (WGS84 lat, lon), used ONLY to draw the campus
+# map. They play no role in the optimization, which uses the measured travel
+# matrix above. Projected to local metres relative to the Aula (x = east,
+# y = north) with an equirectangular projection -- accurate at campus scale.
+# ---------------------------------------------------------------------------
+LATLON = {
+    "ME":        (52.0010036939989,  4.372469296532621),
+    "AE":        (51.990058053195895, 4.375305406775849),
+    "TNW-zuid":  (51.99034120483492, 4.38040207926511),
+    "TNW":       (52.001045753129226, 4.375010579275668),
+    "X":         (51.9953058995266,  4.377683819745358),
+    "EWI":       (51.99903210904164, 4.373401391277419),
+    "TBM":       (52.00247099702076, 4.369405337475284),
+    "IO":        (52.001656468756316, 4.371025303862682),
+    "Library":   (52.0027769010886,  4.375612622127245),
+    "Aula":      (52.00214847280372, 4.374490680587861),
+    "CITG":      (51.99903345752563, 4.376391500172567),
+    "DreamHall": (51.99944619486528, 4.376354048587195),
+    "BK":        (52.00585870196789, 4.3720135315855915),
 }
+assert set(LATLON) == set(NODES) | {DEPOT_NAME}, "LATLON must cover every node + Aula"
+
+_M_PER_DEG_LAT = 111_320.0
 
 
-def _coords() -> dict:
-    """Schematic map only: Aula at the origin; each node at (r cos t, r sin t)
-    with r its measured Aula time and t its bearing. Not used for solving."""
-    c = {DEPOT_NAME: (0.0, 0.0)}
-    for nm in NODES:
-        r = AULA_MIN[nm]
-        a = np.radians(_ANGLE[nm])
-        c[nm] = (r * np.cos(a), r * np.sin(a))
-    return c
+def _project() -> dict:
+    """Local metres relative to the Aula: x = east, y = north."""
+    lat0, lon0 = LATLON[DEPOT_NAME]
+    m_lon = _M_PER_DEG_LAT * np.cos(np.radians(lat0))
+    return {nm: ((lo - lon0) * m_lon, (la - lat0) * _M_PER_DEG_LAT)
+            for nm, (la, lo) in LATLON.items()}
 
 
-_COORD = _coords()
+_COORD = _project()          # {name: (x_east_m, y_north_m)}, Aula at (0, 0)
 
 # ---------------------------------------------------------------------------
 # Manual / measured travel-time override (optional)
