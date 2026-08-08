@@ -44,9 +44,9 @@ N_EXTRA = N_NODES - N_FAC
 @dataclass
 class Params:
     n_tours: int = 3
-    t_max: float = 120.0            # hard pruning ceiling per tour (minutes)
+    t_max: float = 150.0            # hard ceiling per tour (minutes)
     min_fac: int = 2
-    max_fac: int = 5
+    max_fac: int = 3
     dwell: np.ndarray = field(default_factory=default_dwell)
 
     # objective weights, applied to normalized components
@@ -64,8 +64,9 @@ class Params:
     b: np.ndarray = field(default_factory=lambda: np.zeros(N_FAC))
     time_limit_s: float = 120.0
     mip_rel_gap: float = 1e-4
-    prune: bool = True              # exact dominance pruning (verify.py tests it)
-    require_one_extra: bool = True  # exactly one extra building per tour
+    require_one_extra: bool = True         # exactly one extra building per tour
+    max_tours_per_faculty: int = 2         # a faculty may appear in at most this many tours
+    max_extra_per_building: int = 1        # each extra building in at most this many tours
 
 
 # ---------------------------------------------------------------------------
@@ -157,7 +158,8 @@ def recover_order(mask: int) -> list[int]:
 @dataclass
 class Candidates:
     fac_masks: list[int]     # faculty-only bitmask
-    full_masks: list[int]    # with optimal extras
+    full_masks: list[int]    # faculty mask | chosen extras
+    extra_masks: list[int]   # extras only, as bits over the 3 extra buildings
     dur: np.ndarray
     dep: np.ndarray
     under: np.ndarray
@@ -189,21 +191,30 @@ def _mask_dur(mask: int, p: Params, path: np.ndarray) -> float:
 
 
 def build_candidates(p: Params, path: np.ndarray) -> Candidates:
+    """Every feasible (faculty set, extra-building completion) pair is a
+    separate candidate tour. Exposing the extra choice (rather than baking the
+    single best extra per faculty set) is required because the "each extra
+    building in at most one tour" rule couples the extras across tours, so the
+    solver must be free to choose which extra each tour uses.
+    """
     m1 = np.array([IDX[DEPENDENCIES[f][0]] for f in FACULTIES])
     m2 = np.array([IDX[DEPENDENCIES[f][1]] for f in FACULTIES])
     e3 = np.array([IDX[DEPENDENCIES[f][2]] if DEPENDENCIES[f][2] else -1
                    for f in FACULTIES])
 
-    # Which extra-building subsets are allowed as a completion of a faculty set?
+    # Admissible extra-building completions of a faculty set:
     #   require_one_extra=True  -> exactly one of {X, DreamHall, Library}
-    #   require_one_extra=False -> any subset (0..3), chosen optimally
+    #   require_one_extra=False -> any subset (0..3)
     if p.require_one_extra:
         extra_subsets = [1 << e for e in range(N_EXTRA)]      # singletons only
     else:
         extra_subsets = list(range(1 << N_EXTRA))             # all subsets incl. empty
 
-    # pass 1: all feasible (F, E) completions -> fixes dep normalization
-    feas: dict[int, list[tuple[int, float, float]]] = {}
+    K = p.n_tours
+    dur_norm = K * p.t_max
+
+    fac_masks, full_masks, extra_masks = [], [], []
+    durs, deps, unders = [], [], []
     dep_max_raw = 1e-9
     for fmask in range(1, 1 << N_FAC):
         nfac = bin(fmask).count("1")
@@ -211,7 +222,7 @@ def build_candidates(p: Params, path: np.ndarray) -> Candidates:
             continue
         if _mask_dur(fmask, p, path) > p.t_max:
             continue  # extras only add duration, so F alone must already fit
-        lst = []
+        under_F = sum(p.b[f] for f in range(N_FAC) if (fmask >> f) & 1)
         for emask in extra_subsets:
             full = fmask | (emask << N_FAC)
             d = _mask_dur(full, p, path)
@@ -219,55 +230,30 @@ def build_candidates(p: Params, path: np.ndarray) -> Candidates:
                 continue
             dep = _mask_dep(full, p, m1, m2, e3)
             dep_max_raw = max(dep_max_raw, dep)
-            lst.append((full, d, dep))
-        if lst:                      # require >=1 admissible completion
-            feas[fmask] = lst
+            fac_masks.append(fmask)
+            full_masks.append(full)
+            extra_masks.append(emask)
+            durs.append(d)
+            deps.append(dep)
+            unders.append(under_F)
 
-    if not feas:
+    if not fac_masks:
         raise ValueError(
             "No feasible tours: t_max is too small for min_fac faculties plus "
-            "dwell times. Increase t_max or lower min_fac / dwell times."
+            "dwell times (and one extra building, if required). Increase "
+            "t_max or lower min_fac / dwell times."
         )
 
-    K = p.n_tours
+    dur = np.array(durs, float); dep = np.array(deps, float)
+    under = np.array(unders, float)
     dep_norm = K * dep_max_raw
-    dur_norm = K * p.t_max
-
-    # pass 2: optimal extras per faculty set
-    fac_masks, full_masks, durs, deps, unders = [], [], [], [], []
-    for fmask, lst in feas.items():
-        full, d, dep = max(lst, key=lambda t: p.beta * t[2] / dep_norm
-                                              - p.lam * t[1] / dur_norm)
-        fac_masks.append(fmask)
-        full_masks.append(full)
-        durs.append(d)
-        deps.append(dep)
-        unders.append(sum(p.b[f] for f in range(N_FAC) if (fmask >> f) & 1))
-
-    dur = np.array(durs); dep = np.array(deps); under = np.array(unders)
     under_norm = K * max(under.max(), 1e-9)
     val = (p.beta * dep / dep_norm + p.gamma * under / under_norm
            - p.lam * dur / dur_norm)
 
-    # pass 3: exact dominance pruning (superset with >= val dominates)
-    nc = len(fac_masks)
-    keep = np.ones(nc, dtype=bool)
-    if p.prune:
-        order = np.argsort(-val)  # try strong candidates as dominators first
-        for c in range(nc):
-            for c2 in order:
-                if (c2 != c and keep[c2]
-                        and (fac_masks[c] & ~fac_masks[c2]) == 0
-                        and fac_masks[c] != fac_masks[c2]
-                        and val[c2] >= val[c]):
-                    keep[c] = False
-                    break
-
-    sel = np.flatnonzero(keep)
     return Candidates(
-        fac_masks=[fac_masks[i] for i in sel],
-        full_masks=[full_masks[i] for i in sel],
-        dur=dur[sel], dep=dep[sel], under=under[sel], val=val[sel],
+        fac_masks=fac_masks, full_masks=full_masks, extra_masks=extra_masks,
+        dur=dur, dep=dep, under=under, val=val,
         dep_norm=dep_norm, under_norm=under_norm, dur_norm=dur_norm,
     )
 
@@ -407,6 +393,37 @@ def solve(choices: np.ndarray, p: Params) -> SolveResult:
         lo[2 * k + 1] = n
     cons.append(LinearConstraint(A.tocsr(), lo, np.inf))
 
+    # a faculty may appear in at most `max_tours_per_faculty` tours:
+    #   sum_k z[k, f] <= cap        for every faculty f
+    cap_fac = min(p.max_tours_per_faculty, K)
+    if cap_fac < K:
+        A = lil_matrix((N_FAC, NV))
+        for f in range(N_FAC):
+            for k in range(K):
+                A[f, Z(k, f)] = 1
+        cons.append(LinearConstraint(A.tocsr(), -np.inf, cap_fac))
+
+    # each extra building may appear in at most `max_extra_per_building` tours:
+    #   sum over tours and candidates that include extra e of y[k, c] <= cap
+    cap_extra = min(p.max_extra_per_building, K)
+    if cap_extra < K:
+        A = lil_matrix((N_EXTRA, NV))
+        for e in range(N_EXTRA):
+            for k in range(K):
+                for c in range(nc):
+                    if (C.extra_masks[c] >> e) & 1:
+                        A[e, Y(k, c)] = 1
+        cons.append(LinearConstraint(A.tocsr(), -np.inf, cap_extra))
+        # feasibility guard: with exactly one extra per tour and each extra
+        # usable at most cap_extra times, K tours need K <= N_EXTRA * cap_extra
+        if p.require_one_extra and K > N_EXTRA * cap_extra:
+            raise ValueError(
+                f"Infeasible: {K} tours each need one extra building, but with "
+                f"'each extra in at most {cap_extra} tour(s)' only "
+                f"{N_EXTRA * cap_extra} extra-slots exist. Reduce the number of "
+                f"tours, or relax the extra-building limit."
+            )
+
     # bounds & integrality (only y and n integer)
     lb = np.zeros(NV)
     ub = np.full(NV, np.inf)
@@ -426,7 +443,13 @@ def solve(choices: np.ndarray, p: Params) -> SolveResult:
                options={"time_limit": p.time_limit_s,
                         "mip_rel_gap": p.mip_rel_gap, "disp": False})
     if res.x is None:
-        raise RuntimeError(f"Solver failed: {res.message}")
+        raise RuntimeError(
+            "No feasible plan for these settings. This can happen when the "
+            "per-faculty or per-extra-building tour limits are too tight for "
+            "the chosen number of tours and faculties-per-tour. Try allowing "
+            "more faculties per tour, more tours a faculty may appear in, or a "
+            f"higher time limit. (solver message: {res.message})"
+        )
 
     xv = res.x
     gap = float(res.mip_gap) if res.mip_gap is not None else float("nan")

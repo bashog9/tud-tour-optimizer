@@ -105,13 +105,12 @@ Nothing else changes — the rest of the tool adapts automatically.
 
 ## Correctness
 
-`verify.py` checks four things independently of the solver:
+`verify.py` checks the solver independently:
 
-1. Turning on the internal speed-up ("pruning") gives the same answer as
-   leaving it off.
-2. The reported score, recomputed from scratch, matches the solver's score.
-3. Every student is assigned exactly once and every tour respects its limits.
-4. Each tour's travel time is confirmed optimal by brute force (checking every
+1. The reported score, recomputed from scratch, matches the solver's score.
+2. Every student is assigned exactly once, every tour respects its limits, each
+   faculty appears in at most two tours, and each extra building in at most one.
+3. Each tour's travel time is confirmed optimal by brute force (checking every
    possible visiting order).
 
-All four pass on the bundled sample.
+All checks pass on the bundled sample.

@@ -50,11 +50,13 @@ uitproberen zonder eigen data.
 | Knop | Wat het doet |
 |------|--------------|
 | "Number of tours" | Hoeveel rondleidingen er deze week zijn (bijvoorbeeld 3). Meer rondleidingen betekent kleinere groepen. |
-| "Max tour duration" | De maximale lengte van een rondleiding in minuten. Rondleidingen die langer zouden duren, worden nooit gekozen. |
-| "Faculties per tour (min–max)" | Hoeveel faculteiten er minimaal en maximaal in één rondleiding mogen. |
-| "Time spent per faculty" | Hoelang je gemiddeld binnen bent bij een faculteit. |
+| "Max tour duration" | De maximale lengte van een rondleiding in minuten (standaard 150). Rondleidingen die langer zouden duren, worden nooit gekozen. |
+| "Faculties per tour (min–max)" | Hoeveel faculteiten er minimaal en maximaal in één rondleiding mogen (standaard 2–3). |
+| "Time spent per faculty" | Hoelang je gemiddeld binnen bent bij een faculteit (standaard 20 min). |
 | "Time spent per extra building" | Hetzelfde, maar voor de extra gebouwen ("X", "DreamHall", "Library"). |
 | "Exactly one extra building per tour" | Aangevinkt (standaard): elke rondleiding krijgt precies één extra gebouw. Uitgevinkt: de tool kiest zelf hoeveel (0, 1, 2 of 3). |
+| "Max tours a faculty may appear in" | In hoeveel rondleidingen dezelfde faculteit maximaal mag zitten (standaard 2, dus niet in alle drie). |
+| "Max tours an extra building may appear in" | In hoeveel rondleidingen hetzelfde extra gebouw maximaal mag zitten (standaard 1, dus elke rondleiding een ander extra gebouw). |
 
 ### Daaronder: wat vind je deze week belangrijk?
 

@@ -111,45 +111,41 @@ back one optimal visiting order, which is what the app displays as
 
 ---
 
-## 4. Step B — candidate tours and the extra building
+## 4. Step B — candidate tours, the extra building, and coverage limits
 
-Not every subset is a sensible tour. We keep a subset as a candidate only if the
-number of faculties is within "Faculties per tour (min–max)" and its duration is
-within "Max tour duration" ("t_max"). This produces a menu of candidate tours.
+Not every subset is a sensible tour. We keep a faculty set as the basis of a
+candidate only if its number of faculties is within "Faculties per tour
+(min–max)" and its duration is within "Max tour duration" ("t_max").
 
-The extra buildings ("X", "DreamHall", "Library") are handled separately from the
-faculties, and this is a deliberate, exact simplification.
+Each candidate tour is a faculty set together with a choice of extra building.
+By default the tool requires exactly one extra building per tour ("X",
+"DreamHall" or "Library"), so we form one candidate for each faculty set paired
+with each admissible single extra (an extra that keeps the tour within "t_max").
+A faculty set whose cheapest single-extra completion still exceeds "t_max"
+cannot form a valid tour and is dropped. (If "Exactly one extra building per
+tour" is off, a candidate may instead carry any subset of the three extras.)
 
-Observation: an extra building influences only two of the five objective terms —
-the dependency bonus (an extra building is the "related building" of some
-faculties) and the duration. It does not influence student satisfaction
-(students do not rank extra buildings), the under-visited bonus (that is defined
-over faculties), or the balance (that is about student counts). Moreover, the
-extra buildings chosen for one tour do not affect any other tour or the
-assignment.
+We expose the extra choice as part of the candidate — rather than pre-selecting
+one best extra per faculty set — because of two coverage rules the tool now
+enforces:
 
-Therefore, for a fixed faculty set F, the best extra building can be chosen on
-its own, without reference to anything else in the problem:
+- Each extra building is used in at most one tour ("Max tours an extra building
+  may appear in", default 1). With three tours and three extras this gives every
+  tour a different extra.
+- A single faculty appears in at most two tours ("Max tours a faculty may appear
+  in", default 2), so no faculty is on every route.
 
-    e*(F) = argmax over admissible e of [ beta·DEP(F ∪ e) − lam·DUR(F ∪ e) ]
+The first rule links the extra-building choices across tours (they may not
+share), so which extra each tour uses can no longer be decided in isolation — it
+is a genuine decision the optimizer makes. Both rules are simple linear
+constraints in the model (section 7). An extra building still earns its place
+only through the pairing bonus, weighed against its walking and dwell cost.
 
-(both terms in their normalized form; see section 6). By default the tool
-requires exactly one extra building per tour ("Exactly one extra building per
-tour" is on), so e ranges over the three singletons; a faculty set whose cheapest
-single-extra completion still exceeds "t_max" cannot form a valid tour and is
-dropped. If the option is off, e ranges over all subsets of the three extras
-(including none), and the same argument gives the best subset.
-
-Because this choice is exact and local, we make it once per faculty set before
-the optimization. This is what "it disappears from the optimization step" means:
-the optimizer never sees the extra-building decision; it only sees completed
-candidate tours, each already carrying its best extra building, its duration, and
-its dependency bonus.
-
-Finally we apply dominance pruning: a candidate whose faculty set is a subset of
-another candidate's faculty set with an equal-or-better tour value can be dropped
-(argument in section 8). This shrinks the menu substantially — in the bundled
-example from a few hundred to around a hundred — with no effect on the optimum.
+An earlier version of this tool pre-selected the single best extra per faculty
+set and pruned "dominated" faculty sets; both shortcuts relied on the extras and
+the tours being independent, which the coverage rules above break, so they have
+been removed. The candidate list is small enough (a few hundred, given at most
+three faculties per tour) that the solver handles it directly.
 
 ---
 
@@ -240,13 +236,20 @@ under-visited bonus of a tour is the sum of the per-faculty bonuses "b" (the
 Collecting the pieces, the tool solves a mixed-integer linear program (MILP):
 
 Decision variables:
-- y[k,c] ∈ {0,1}: tour k uses candidate c. Exactly one candidate per tour.
+- y[k,c] ∈ {0,1}: tour k uses candidate c (a faculty set with its extra). Exactly
+  one candidate per tour.
 - z[k,f] ∈ {0,1}: faculty f is on tour k. Pinned by an equality to the y's, so it
   is determined once the candidate is chosen.
 - n[t,k] ∈ integers ≥ 0: how many students of type t go to tour k. For each type
   these sum to the type's count (every student assigned).
 - g[t,r,k] ≥ 0: honored-satisfaction counts from section 5.
 - dev_k ≥ 0: the balance deviation, with dev_k ≥ K·n_k − n and dev_k ≥ n − K·n_k.
+
+Coverage constraints:
+- Each faculty in at most two tours: for every faculty f, sum over tours of
+  z[k,f] ≤ 2.
+- Each extra building in at most one tour: for every extra e, the sum of y[k,c]
+  over all tours k and all candidates c whose extra is e is ≤ 1.
 
 Objective: the normalized weighted sum from section 6, written entirely in these
 variables. Every constraint and the objective are linear, and the only variables
@@ -282,27 +285,20 @@ closing step adds the return leg to the Aula and minimizes over the endpoint, so
 d(S) is the exact shortest closed tour. "verify.py" confirms this independently by
 brute-forcing all orderings of each chosen tour and matching the number.
 
-Argument 2 — choosing the extra building per faculty set is exact. Fix a faculty
-set F used on some tour. The extra building enters the objective only through
-that tour's DEP and DUR terms, which are added to the objective with fixed
-coefficients and do not appear in any other tour's terms, in the satisfaction, in
-the under-visited term, or in the balance. Hence, holding the rest of the plan
-fixed, the contribution of the extra choice is exactly beta·DEP(F∪e) −
-lam·DUR(F∪e) (normalized), which is maximized by e*(F) independent of everything
-else. Since this holds for whatever the rest of the plan is, precomputing e*(F)
-loses nothing.
+Argument 2 — the extra-building choice is represented exactly. Because each extra
+may be used in at most one tour, the extras are not independent across tours, so
+the tool does not pre-select one per faculty set. Instead every (faculty set,
+admissible extra) pair is its own candidate, and the "at most one tour per extra"
+rule is a linear constraint over the y variables. The solver therefore optimizes
+the extra assignment jointly with everything else; nothing about it is
+approximated or fixed in advance.
 
-Argument 3 — dominance pruning is safe. Suppose faculty set F is a strict subset
-of F', and the tour value val(F') ≥ val(F), where val = beta·DEP + gamma·UNDER −
-lam·DUR (normalized, each on its completed candidate). Take any feasible plan that
-uses F on some tour slot and replace F by F' on that slot, leaving the assignment
-and all other tours unchanged. The candidate-value term does not decrease
-(val(F') ≥ val(F)). Every student on that slot keeps all the faculties they had
-(F' contains all of F's faculties), so no student's satisfaction decreases. The
-balance is unchanged (student counts per slot are untouched). Hence the objective
-does not decrease, and F' is feasible, so an optimum exists that does not use F.
-Therefore F can be removed. "verify.py" additionally solves the model with pruning
-switched off and checks the optimum is identical.
+Argument 3 — no candidates are discarded. The tool enumerates every feasible
+candidate (faculty set within the size and time limits, paired with each
+admissible extra) and hands them all to the solver. An earlier version pruned
+"dominated" faculty sets, but that shortcut assumed tours were independent, which
+the coverage rules break; it has been removed, so there is simply nothing to
+justify — the full candidate list is searched.
 
 Argument 4 — type aggregation and the satisfaction linearization are exact. The
 satisfaction and balance depend on the assignment only through the counts n[t,k],
@@ -315,9 +311,10 @@ way g equals the true number of honored type-t students at rank r on tour k, so
 the summed term is exactly the rank-weighted satisfaction. (g need not be declared
 integer: at the optimum it already equals an integer quantity.)
 
-Together these four say: the durations are exact, the extras and the pruning
-throw nothing away, and the compact student model reproduces the true objective.
-Nothing between the input and the "proven optimal" plan is approximate.
+Together these four say: the durations are exact, the extra-building assignment
+and every candidate are represented without approximation, and the compact
+student model reproduces the true objective. Nothing between the input and the
+"proven optimal" plan is approximate.
 
 ---
 

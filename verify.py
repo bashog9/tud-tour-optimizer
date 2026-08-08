@@ -30,7 +30,7 @@ def recompute_objective(res, choices, p: Params) -> float:
     solution only (no solver internals)."""
     n, K = len(choices), p.n_tours
     rho = np.array(p.rho)
-    C = build_candidates(replace(p, prune=False), shortest_tours())
+    C = build_candidates(p, shortest_tours())
 
     sat_max = n * rho.sum()
     bal_norm = 2 * n * (K - 1) if K > 1 else 1.0
@@ -66,18 +66,11 @@ def brute_force_duration(node_names, p: Params) -> float:
 def main():
     df = make(50, path=None)
     choices = load_choices(df)
-    p = Params(t_max=120.0, b=np.array([0, 0, 1., 0, 0, 0, 2., 1., 1.5]),
-               mip_rel_gap=1e-6)
+    p = Params(b=np.array([0, 0, 1., 0, 0, 0, 2., 1., 1.5]), mip_rel_gap=1e-6)
 
-    print("solve (pruned)...")
+    print("solve...")
     res = solve(choices, p)
     print(f"  {res.status}, objective {res.objective:.6f}, gap {res.gap:.1e}")
-
-    print("solve (pruning disabled)...")
-    res2 = solve(choices, replace(p, prune=False))
-    assert abs(res.objective - res2.objective) < 1e-5, \
-        f"pruned {res.objective} != unpruned {res2.objective}"
-    print(f"  pruning check OK ({res2.objective:.6f})")
 
     obj2 = recompute_objective(res, choices, p)
     assert abs(obj2 - res.objective) < 1e-5, f"{obj2} vs {res.objective}"
@@ -86,6 +79,8 @@ def main():
     seen = sorted(i for t in res.tours for i in t.students)
     assert seen == list(range(len(choices))), "assignment not a partition"
     from campus_data import EXTRAS
+    fac_tours = {f: 0 for f in FACULTIES}
+    extra_tours = {e: 0 for e in EXTRAS}
     for t in res.tours:
         nfac = sum(1 for nm in t.nodes if nm in FACULTIES)
         assert p.min_fac <= nfac <= p.max_fac
@@ -93,7 +88,17 @@ def main():
         if p.require_one_extra:
             nextra = sum(1 for nm in t.nodes if nm in EXTRAS)
             assert nextra == 1, f"{t.nodes}: expected exactly one extra, got {nextra}"
-    print("  feasibility OK")
+        for nm in t.nodes:
+            if nm in fac_tours:
+                fac_tours[nm] += 1
+            if nm in extra_tours:
+                extra_tours[nm] += 1
+    assert max(fac_tours.values()) <= p.max_tours_per_faculty, \
+        f"a faculty appears in more than {p.max_tours_per_faculty} tours: {fac_tours}"
+    assert max(extra_tours.values()) <= p.max_extra_per_building, \
+        f"an extra building appears in more than {p.max_extra_per_building} tours: {extra_tours}"
+    print(f"  feasibility OK (faculty<= {p.max_tours_per_faculty} tours, "
+          f"extra <= {p.max_extra_per_building} tour)")
 
     for t in res.tours:
         bf = brute_force_duration(t.nodes, p)

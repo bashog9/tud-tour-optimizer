@@ -32,14 +32,22 @@ st.caption(
 with st.sidebar:
     st.header("Tour structure")
     K = st.slider("Number of tours", 1, 6, 3)
-    t_max = st.slider("Max tour duration (minutes)", 45, 240, 120, step=5)
-    min_fac, max_fac = st.slider("Faculties per tour (min–max)", 1, 9, (2, 5))
-    dwell_fac = st.slider("Time spent per faculty (min)", 5, 40, 15)
+    t_max = st.slider("Max tour duration (minutes)", 45, 240, 150, step=5)
+    min_fac, max_fac = st.slider("Faculties per tour (min–max)", 1, 9, (2, 3))
+    dwell_fac = st.slider("Time spent per faculty (min)", 5, 40, 20)
     dwell_extra = st.slider("Time spent per extra building (min)", 0, 30, 10)
     one_extra = st.checkbox("Exactly one extra building per tour", value=True,
                             help="Each tour includes exactly one of X, DreamHall "
                                  "or Library. Turn off to let the tool choose any "
                                  "number (including none).")
+    max_fac_tours = st.slider("Max tours a faculty may appear in", 1, K, min(2, K),
+                              help="A faculty is used in at most this many of the "
+                                   "tours (e.g. 2 = not on all three).")
+    max_extra_tours = st.slider("Max tours an extra building may appear in", 1, K,
+                                min(1, K),
+                                help="Each of X, DreamHall, Library is used in at "
+                                     "most this many tours (1 = a different extra "
+                                     "per tour).")
 
     st.header("What matters how much?")
     st.caption("All components are normalized, so weights are comparable.")
@@ -126,6 +134,7 @@ if st.button("Optimize", type="primary"):
         dwell=dwell, alpha=alpha, beta=beta, gamma=gamma, lam=lam, mu=mu,
         rho=(rho1, rho2, rho3), w1=w1, w2=w2, w3=w3, b=b,
         time_limit_s=float(tlimit), require_one_extra=one_extra,
+        max_tours_per_faculty=max_fac_tours, max_extra_per_building=max_extra_tours,
     )
     with st.spinner("Solving to proven optimality (typically < 1 minute)..."):
         try:

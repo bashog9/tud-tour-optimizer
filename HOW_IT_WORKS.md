@@ -102,22 +102,21 @@ A hard time ceiling ("Max tour duration", the variable "t_max") simply throws
 away any set that is too long to be a real tour; the gentle penalty does the
 fine-tuning below that ceiling.
 
-### One extra building per tour
+### One extra building per tour, each used once
 
 By default each tour includes exactly one extra building ("X", "DreamHall" or
-"Library") — never zero, never two. For each set of faculties the tool simply
-picks the single best extra: the one whose pairing bonus, minus its walking and
-dwell cost, is highest. This is decided before the main optimization and then
-fixed, so it does not enlarge the search. It is exact because an extra building
-affects only two things — the pairing bonus (it is the "related extra building"
-above) and the duration — and nothing else (students don't rank extras, and
-extras don't touch the under-visited bonus or the balance). So the best extra
-for a faculty set can be chosen on its own, independently of which tour it
-becomes or who is assigned to it.
+"Library"), and each of the three extras is used in at most one tour — so with
+three tours every tour gets a different extra. The tool chooses which extra goes
+with which tour as part of the optimization, because that choice is now linked
+across tours (they can't share). An extra still only earns its keep through the
+pairing bonus, weighed against the extra walking and dwell time.
+
+There is one more coverage rule: a single faculty may appear in at most two of
+the tours (never on all three), so no faculty dominates every route.
 
 If you prefer, the checkbox "Exactly one extra building per tour" can be turned
-off; the tool then chooses any number of extras (none, one, two or all three),
-again optimally and by the same argument.
+off; the tool then chooses any number of extras (none, one, two or all three).
+The two "Max tours ..." sliders control the coverage limits above.
 
 ---
 
@@ -129,17 +128,11 @@ less for their second, less again for their third, nothing if none are. The
 rewards are "3, 2, 1" by default (the "rho" weights, adjustable under
 "Advanced"). The overall weight on student happiness is "alpha".
 
-Two tricks keep this fast:
-
-- Group identical students. Many students submit the same three choices in the
-  same order. We treat each distinct triple once and remember how many students
-  have it, then decide how many of each type go on each tour rather than tracking
-  individuals.
-- Throw away dominated tours. If some faculty set A is contained in a bigger set
-  B, and B scores at least as well on the tour score from section 5, then B
-  satisfies every student at least as well as A — so A can never be the better
-  choice and we delete it. This safely removes most candidates before the hard
-  work starts.
+One trick keeps this fast: group identical students. Many students submit the
+same three choices in the same order. We treat each distinct triple once and
+remember how many students have it, then decide how many of each type go on each
+tour rather than tracking individuals. That shrinks the problem a lot without
+changing the answer.
 
 ---
 
@@ -219,9 +212,9 @@ so the numbers are used exactly as given. If a time ever changes, edit
 | Map programmes to faculties, merge duplicates | `campus_data.py`, `build_choice_matrix()` |
 | Shortest tour time for every set (section 4)  | `shortest_tours()` |
 | Recover the actual visiting order             | `recover_order()` |
-| Score every candidate, pick best extras (5)   | `build_candidates()` |
-| Throw away dominated tours (6)                | `build_candidates()`, "pass 3" |
+| Score every candidate (faculty set + extra) (5)| `build_candidates()` |
 | Group identical students (6)                  | `aggregate_types()` |
+| Coverage limits (extra once, faculty <= 2)    | `solve()` (cap constraints) |
 | The full optimization (7 and 8)               | `solve()` |
 | Independent correctness checks (9)            | `verify.py` |
 
