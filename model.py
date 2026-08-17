@@ -50,13 +50,13 @@ class Params:
     dwell: np.ndarray = field(default_factory=default_dwell)
 
     # objective weights, applied to normalized components
-    alpha: float = 1.0              # student satisfaction
+    alpha: float = 1.5              # student satisfaction
     beta: float = 0.4               # dependency bonus
-    gamma: float = 0.3              # undervisited bonus
+    gamma: float = 0.1              # undervisited bonus
     lam: float = 0.3                # duration penalty (soft time preference)
     mu: float = 0.5                 # balance penalty
 
-    rho: tuple[float, float, float] = (3.0, 2.0, 1.0)   # rank weights
+    rho: tuple[float, float, float] = (5.0, 2.0, 1.0)   # rank weights
     w1: float = 2.0                 # first-degree partner bonus
     w2: float = 1.0                 # second-degree partner bonus
     w3: float = 1.0                 # designated extra-building bonus
