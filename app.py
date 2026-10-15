@@ -54,14 +54,14 @@ with st.sidebar:
 
     st.header("What matters how much?")
     st.caption("All components are normalized, so weights are comparable.")
-    alpha = st.slider("Student preferences", 0.0, 2.0, 1.0, 0.05)
+    alpha = st.slider("Student preferences", 0.0, 2.0, 1.5, 0.05)
     beta = st.slider("Faculty combinations (dependencies)", 0.0, 2.0, 0.4, 0.05)
-    gamma = st.slider("Undervisited faculties", 0.0, 2.0, 0.3, 0.05)
+    gamma = st.slider("Undervisited faculties", 0.0, 2.0, 0.1, 0.05)
     lam = st.slider("Shorter tours", 0.0, 2.0, 0.3, 0.05)
     mu = st.slider("Equal group sizes", 0.0, 2.0, 0.5, 0.05)
 
     with st.expander("Advanced"):
-        rho1 = st.number_input("Weight of 1st choice", 0.0, 10.0, 3.0)
+        rho1 = st.number_input("Weight of 1st choice", 0.0, 10.0, 5.0)
         rho2 = st.number_input("Weight of 2nd choice", 0.0, 10.0, 2.0)
         rho3 = st.number_input("Weight of 3rd choice", 0.0, 10.0, 1.0)
         w1 = st.number_input("Bonus: 1st-degree partner in same tour", 0.0, 10.0, 2.0)
